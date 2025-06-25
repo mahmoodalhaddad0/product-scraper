@@ -34,22 +34,28 @@ def extract_data(url):
         "name":  name,
         "price": price,
         "description": description,
-        "image_urls": image_urls[:10],   # تيليجرام يقبل ١٠ صور كحد أقصى
+        "image_urls": image_urls[:10],
         "source_url": url
     }
 
-# ---------- إرسال الصور إلى تيليجرام ----------
+# ---------- إرسال الصور كملفات إلى تيليجرام ----------
 def send_images_to_telegram(chat_id, image_urls):
     if not image_urls:
         print("⚠️ لا توجد صور لإرسالها")
         return
-    media = [{"type": "photo", "media": url, "caption": ""} for url in image_urls]
-    media[0]["caption"] = "📦 Product Images"
-    r = requests.post(
-        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMediaGroup",
-        json={"chat_id": chat_id, "media": media}
-    )
-    print("Telegram status:", r.status_code)
+
+    for i, url in enumerate(image_urls[:10]):
+        caption = "📦 Product Image" if i == 0 else ""
+        payload = {
+            "chat_id": chat_id,
+            "document": url,
+            "caption": caption
+        }
+        r = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument",
+            json=payload
+        )
+        print(f"📤 أُرسلت الصورة {i+1}, Status: {r.status_code}")
 
 # ---------- إرسال البيانات إلى Google Sheet ----------
 def send_data_to_sheet(data):
@@ -61,7 +67,7 @@ def send_data_to_sheet(data):
         "url":   data["source_url"]
     }
     r = requests.post(GOOGLE_SHEET_WEBHOOK, json=payload)
-    print("Google Sheets Response:", r.text.strip())
+    print("📋 Google Sheets Response:", r.text.strip())
 
 # ---------- مسار الـ API ----------
 @app.route("/scrape", methods=["POST"])
