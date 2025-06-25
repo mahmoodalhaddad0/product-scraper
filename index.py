@@ -9,29 +9,57 @@ TELEGRAM_BOT_TOKEN = "7680689964:AAGSBbuksqOvd7Zvh_8JZhpVNMyuTFLwEMA"
 GOOGLE_SHEET_WEBHOOK = "https://script.google.com/macros/s/AKfycbxKSbpFDXQAcXbVMV35oJwP6H04L67Nn_mZkKJJnSlr5Bw5OzCQH11wP6RcBuvP-WJtLQ/exec"
 
 def extract_data(url):
-    headers = { "User-Agent": "Mozilla/5.0" }
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
+    print("🚀 بدء استخراج البيانات من:", url)
 
-    title = soup.find("title").text.strip() if soup.find("title") else ""
-    price = ""
-    for tag in soup.find_all(["span", "div"]):
-        if tag and tag.text and any(c in tag.text for c in ["$", "USD"]):
-            price = tag.text.strip()
-            break
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
 
-    images = []
-    for img in soup.find_all("img"):
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+    except Exception as e:
+        print("❌ فشل الوصول للرابط:", e)
+        return None
+
+    soup = BeautifulSoup(response.content, "html.parser")
+
+    # استخراج اسم المنتج
+    name = soup.find("title").get_text(strip=True)
+    print("📝 الاسم:", name)
+
+    # استخراج السعر
+    price_element = soup.find("span", class_="price") or soup.find("span", class_="ProductPrice") or soup.find("span", {"data-testid": "price"})
+    price = price_element.get_text(strip=True) if price_element else "غير متوفر"
+    print("💰 السعر:", price)
+
+    # استخراج الوصف
+    desc_element = soup.find("meta", {"name": "description"}) or soup.find("div", class_="description")
+    description = desc_element.get("content", "").strip() if desc_element and desc_element.name == "meta" else desc_element.get_text(strip=True) if desc_element else "غير متوفر"
+    print("📄 الوصف:", description)
+
+    # استخراج كل الصور
+    image_tags = soup.find_all("img")
+    image_urls = []
+
+    for img in image_tags:
         src = img.get("src") or img.get("data-src")
-        if src and src.startswith("http"):
-            images.append(src)
+        if src and "product" in src and src.startswith("http"):
+            image_urls.append(src)
 
+    print("🖼️ عدد الصور:", len(image_urls))
+
+    if not image_urls:
+        print("⚠️ لم يتم العثور على صور مناسبة.")
+    
     return {
-        "title": title,
+        "name": name,
         "price": price,
-        "image_urls": images[:5],
+        "description": description,
+        "image_urls": image_urls,
         "source_url": url
     }
+
 
 def send_images_to_telegram(chat_id, image_urls):
     media = []
