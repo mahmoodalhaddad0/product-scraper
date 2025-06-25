@@ -4,24 +4,13 @@ from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-TELEGRAM_BOT_TOKEN   = "7680689964:AAGSBbuksqOvd7Zvh_8JZhpVNMyuTFLwEMA"
-GOOGLE_SHEET_WEBHOOK = "https://script.google.com/macros/s/AKfycbxKSbpFDXQAcXbVMV35oJwP6H04L67Nn_mZkKJJnSlr5Bw5OzCQH11wP6RcBuvP-WJtLQ/exec"
+TELEGRAM_BOT_TOKEN = "7680689964:AAGSBbuksqOvd7Zvh_8JZhpVNMyuTFLwEMA"
 
-# ---------- استخراج بيانات المنتج ----------
-def extract_data(url):
+# استخراج روابط الصور من موقع تشارلز أند كيث
+def extract_images(url):
     headers = {"User-Agent": "Mozilla/5.0"}
-    res  = requests.get(url, headers=headers, timeout=10)
+    res = requests.get(url, headers=headers, timeout=10)
     soup = BeautifulSoup(res.content, "html.parser")
-
-    name = soup.find("title").get_text(strip=True)
-
-    price_tag = soup.find("span", class_="price") \
-            or soup.find("span", class_="ProductPrice") \
-            or soup.find("span", {"data-testid": "price"})
-    price = price_tag.get_text(strip=True) if price_tag else "غير متوفر"
-
-    desc_tag = soup.find("meta", {"name": "description"})
-    description = desc_tag["content"].strip() if desc_tag else "غير متوفر"
 
     image_urls = []
     for img in soup.find_all("img"):
@@ -29,47 +18,34 @@ def extract_data(url):
         if src and src.startswith("http") and "product" in src:
             image_urls.append(src)
 
-    print("🖼️ عدد الصور:", len(image_urls))
-    return {
-        "name":  name,
-        "price": price,
-        "description": description,
-        "image_urls": image_urls[:10],
-        "source_url": url
-    }
+    return filter_largest_images(image_urls)
 
-# ---------- إرسال الصور كملفات إلى تيليجرام ----------
+# اختيار أكبر 6 صور من حيث الحجم
+def get_image_size(url):
+    try:
+        r = requests.head(url, timeout=5)
+        return int(r.headers.get("Content-Length", 0))
+    except:
+        return 0
+
+def filter_largest_images(image_urls, limit=6):
+    images_with_sizes = [(url, get_image_size(url)) for url in image_urls]
+    images_with_sizes.sort(key=lambda x: x[1], reverse=True)
+    return [url for url, _ in images_with_sizes[:limit]]
+
+# إرسال الصور إلى تيليجرام
 def send_images_to_telegram(chat_id, image_urls):
     if not image_urls:
-        print("⚠️ لا توجد صور لإرسالها")
+        print("⚠️ لا توجد صور مناسبة")
         return
+    media = [{"type": "photo", "media": url, "caption": ""} for url in image_urls]
+    media[0]["caption"] = "🖼️ Product Images"
+    requests.post(
+        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMediaGroup",
+        json={"chat_id": chat_id, "media": media}
+    )
 
-    for i, url in enumerate(image_urls[:10]):
-        caption = "📦 Product Image" if i == 0 else ""
-        payload = {
-            "chat_id": chat_id,
-            "document": url,
-            "caption": caption
-        }
-        r = requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument",
-            json=payload
-        )
-        print(f"📤 أُرسلت الصورة {i+1}, Status: {r.status_code}")
-
-# ---------- إرسال البيانات إلى Google Sheet ----------
-def send_data_to_sheet(data):
-    payload = {
-        "name":  data["name"],
-        "price": data["price"],
-        "description": data["description"],
-        "image_url": data["image_urls"][0] if data["image_urls"] else "",
-        "url":   data["source_url"]
-    }
-    r = requests.post(GOOGLE_SHEET_WEBHOOK, json=payload)
-    print("📋 Google Sheets Response:", r.text.strip())
-
-# ---------- مسار الـ API ----------
+# نقطة تشغيل API
 @app.route("/scrape", methods=["POST"])
 def scrape():
     url     = request.json.get("url")
@@ -77,12 +53,11 @@ def scrape():
     if not url or not chat_id:
         return jsonify({"error": "Missing url or chat_id"}), 400
 
-    data = extract_data(url)
-    send_images_to_telegram(chat_id, data["image_urls"])
-    send_data_to_sheet(data)
-    return jsonify({"status": "done"})
+    image_urls = extract_images(url)
+    send_images_to_telegram(chat_id, image_urls)
+    return jsonify({"status": "done", "image_count": len(image_urls)})
 
-# ---------- تشغيل فلاســك ----------
+# تشغيل الخادم
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
