@@ -3,7 +3,7 @@ import requests, os
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
-TELEGRAM_BOT_TOKEN = "توكن-بوت-التلقرام"
+TELEGRAM_BOT_TOKEN = "7680689964:AAGSBbuksqOvd7Zvh_8JZhpVNMyuTFLwEMA"
 
 def get_image_size(url):
     try:
@@ -38,6 +38,9 @@ def extract_images(url):
                 if src.startswith("http") and ".jpg" in src:
                     image_urls.append(src)
 
+    print("🔍 Found raw images:", len(image_urls))
+    print("🔗 Raw image URLs:", image_urls)
+
     return filter_largest_images(image_urls)
 
 def send_images_to_telegram(chat_id, image_urls):
@@ -59,6 +62,9 @@ def scrape():
         return jsonify({"error": "Missing url or chat_id"}), 400
 
     image_urls = extract_images(url)
+    print("✅ Filtered image count:", len(image_urls))
+    print("✅ Filtered image URLs:", image_urls)
+
     send_images_to_telegram(chat_id, image_urls)
     return jsonify({"status": "done", "images_sent": len(image_urls)})
 
