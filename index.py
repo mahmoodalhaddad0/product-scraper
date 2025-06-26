@@ -13,8 +13,15 @@ def get_image_size(url):
         return 0
 
 def filter_largest_images(image_urls, min_size=20_000, min_count=3, max_count=10):
+    print("🔍 Found raw images:", len(image_urls))
+    print("🔗 Raw image URLs:", image_urls)
+
     images_with_sizes = [(url, get_image_size(url)) for url in image_urls]
     filtered = [url for url, size in sorted(images_with_sizes, key=lambda x: x[1], reverse=True) if size >= min_size]
+
+    print("✅ Filtered image count:", len(filtered))
+    print("✅ Filtered image URLs:", filtered[:max_count])
+
     return filtered[:max_count] if len(filtered) >= min_count else []
 
 def extract_images(url):
@@ -25,8 +32,8 @@ def extract_images(url):
 
     if "charleskeith.com" in url or "wardow.com" in url or "6pm.com" in url:
         for img in soup.find_all("img"):
-            src = img.get("src") or img.get("data-src")
-            if src and src.startswith("http") and "product" in src:
+            src = img.get("src") or img.get("data-src") or img.get("data-original")
+            if src and "product" in src and src.startswith("http"):
                 image_urls.append(src)
 
     elif "coachoutlet.com" in url:
@@ -37,9 +44,6 @@ def extract_images(url):
                     src = src.split(",")[-1].strip().split(" ")[0]
                 if src.startswith("http") and ".jpg" in src:
                     image_urls.append(src)
-
-    print("🔍 Found raw images:", len(image_urls))
-    print("🔗 Raw image URLs:", image_urls)
 
     return filter_largest_images(image_urls)
 
@@ -62,9 +66,6 @@ def scrape():
         return jsonify({"error": "Missing url or chat_id"}), 400
 
     image_urls = extract_images(url)
-    print("✅ Filtered image count:", len(image_urls))
-    print("✅ Filtered image URLs:", image_urls)
-
     send_images_to_telegram(chat_id, image_urls)
     return jsonify({"status": "done", "images_sent": len(image_urls)})
 
