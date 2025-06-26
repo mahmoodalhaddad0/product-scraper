@@ -11,7 +11,7 @@ import requests, os
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
-TELEGRAM_BOT_TOKEN = "ضع_توكن_البوت_هنا"
+TELEGRAM_BOT_TOKEN = "7680689964:AAGSBbuksqOvd7Zvh_8JZhpVNMyuTFLwEMA"
 
 # ---------- فلترة الصور ----------
 def get_size(url):
