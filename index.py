@@ -19,7 +19,7 @@ def extract_images_standard(url):
 
     return filter_images(image_urls)
 
-# --------- استخراج الصور من موقع 6pm ---------
+# --------- استخراج الصور من 6pm ---------
 def extract_images_6pm(url):
     headers = {"User-Agent": "Mozilla/5.0"}
     res = requests.get(url, headers=headers, timeout=10)
@@ -40,7 +40,26 @@ def extract_images_6pm(url):
 
     return filter_images(image_urls)
 
-# --------- فلترة الصور حسب الحجم ---------
+# --------- استخراج الصور من Coach Outlet ---------
+def extract_images_coach(url):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    res = requests.get(url, headers=headers, timeout=10)
+    soup = BeautifulSoup(res.content, "html.parser")
+
+    image_urls = []
+    for img in soup.find_all("img"):
+        srcset = img.get("srcset") or img.get("src")
+        if srcset and ".jpg" in srcset:
+            parts = [s.strip() for s in srcset.split(",")]
+            largest = parts[-1].split(" ")[0]
+            if largest.startswith("http"):
+                image_urls.append(largest)
+        elif src and src.startswith("http") and ".jpg" in src:
+            image_urls.append(src)
+
+    return filter_images(image_urls)
+
+# --------- فلترة الصور ---------
 def get_image_size(url):
     try:
         r = requests.head(url, timeout=5)
@@ -50,12 +69,12 @@ def get_image_size(url):
 
 def filter_images(image_urls):
     images_with_sizes = [(url, get_image_size(url)) for url in image_urls]
-    images_with_sizes = [i for i in images_with_sizes if i[1] > 20 * 1024]  # أكبر من 20KB
+    images_with_sizes = [i for i in images_with_sizes if i[1] > 20 * 1024]
     images_with_sizes.sort(key=lambda x: x[1], reverse=True)
     selected = [url for url, _ in images_with_sizes[:10]]
     return selected if len(selected) >= 3 else []
 
-# --------- إرسال الصور إلى تيليجرام ---------
+# --------- إرسال الصور إلى تليجرام ---------
 def send_images_to_telegram(chat_id, image_urls):
     if len(image_urls) < 3:
         print("⚠️ عدد الصور غير كافي")
@@ -67,7 +86,7 @@ def send_images_to_telegram(chat_id, image_urls):
         json={"chat_id": chat_id, "media": media}
     )
 
-# --------- نقطة الدخول الرئيسية ---------
+# --------- نقطة الدخول ---------
 @app.route("/scrape", methods=["POST"])
 def scrape():
     url = request.json.get("url")
@@ -79,13 +98,14 @@ def scrape():
         image_urls = extract_images_standard(url)
     elif "6pm.com" in url:
         image_urls = extract_images_6pm(url)
+    elif "coachoutlet.com" in url:
+        image_urls = extract_images_coach(url)
     else:
         return jsonify({"error": "Unsupported website"}), 400
 
     send_images_to_telegram(chat_id, image_urls)
     return jsonify({"status": "done", "image_count": len(image_urls)})
 
-# --------- تشغيل الخادم ---------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
