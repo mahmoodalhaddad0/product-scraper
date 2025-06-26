@@ -3,10 +3,9 @@ import requests, os
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
+TELEGRAM_BOT_TOKEN = "توكن-التلقرام"
 
-TELEGRAM_BOT_TOKEN = "7680689964:AAGSBbuksqOvd7Zvh_8JZhpVNMyuTFLwEMA"
-
-# ---------- استخراج روابط الصور ----------
+# ---------- استخراج الصور ----------
 def extract_images(url):
     headers = {"User-Agent": "Mozilla/5.0"}
     res = requests.get(url, headers=headers, timeout=10)
@@ -14,22 +13,26 @@ def extract_images(url):
 
     image_urls = []
 
-    for img in soup.find_all("img"):
-        src = img.get("src") or img.get("data-src")
+    # المواقع المدعومة حالياً:
+    if "charleskeith.com" in url or "wardow.com" in url or "6pm.com" in url:
+        for img in soup.find_all("img"):
+            src = img.get("src") or img.get("data-src")
+            if src and src.startswith("http") and "product" in src:
+                image_urls.append(src)
 
-        # دعم srcset (مثل موقع coachoutlet)
-        srcset = img.get("srcset")
-        if srcset:
-            candidates = [s.strip().split(" ")[0] for s in srcset.split(",")]
-            if candidates and candidates[-1].startswith("http"):
-                src = candidates[-1]
-
-        if src and src.startswith("http") and "product" in src:
-            image_urls.append(src)
+    elif "coachoutlet.com" in url:
+        for img in soup.find_all("img"):
+            src = img.get("srcset") or img.get("src")
+            if src:
+                # srcset يحتوي على عدة صور، نختار الأكبر
+                if "srcset" in img.attrs:
+                    src = src.split(",")[-1].strip().split(" ")[0]
+                if src.startswith("http") and ".jpg" in src:
+                    image_urls.append(src)
 
     return filter_largest_images(image_urls)
 
-# ---------- تصفية الصور الأكبر حجماً ----------
+# ---------- اختيار أكبر الصور ----------
 def get_image_size(url):
     try:
         r = requests.head(url, timeout=5)
@@ -37,17 +40,15 @@ def get_image_size(url):
     except:
         return 0
 
-def filter_largest_images(image_urls):
+def filter_largest_images(image_urls, min_size=20_000, min_count=3, max_count=10):
     images_with_sizes = [(url, get_image_size(url)) for url in image_urls]
-    images_with_sizes = [x for x in images_with_sizes if x[1] > 20_000]  # فقط الصور > 20KB
-    images_with_sizes.sort(key=lambda x: x[1], reverse=True)
-    filtered = [url for url, _ in images_with_sizes[:10]]
-    return filtered if len(filtered) >= 3 else []
+    filtered = [url for url, size in sorted(images_with_sizes, key=lambda x: x[1], reverse=True) if size >= min_size]
+    return filtered[:max_count] if len(filtered) >= min_count else []
 
-# ---------- إرسال الصور إلى تيليجرام ----------
+# ---------- إرسال الصور لتليجرام ----------
 def send_images_to_telegram(chat_id, image_urls):
     if not image_urls:
-        print("⚠️ لا توجد صور مناسبة")
+        print("❌ لا توجد صور مناسبة للإرسال.")
         return
     media = [{"type": "photo", "media": url, "caption": ""} for url in image_urls]
     media[0]["caption"] = "🖼️ Product Images"
@@ -56,19 +57,18 @@ def send_images_to_telegram(chat_id, image_urls):
         json={"chat_id": chat_id, "media": media}
     )
 
-# ---------- API ----------
+# ---------- نقطة تشغيل API ----------
 @app.route("/scrape", methods=["POST"])
 def scrape():
-    url = request.json.get("url")
+    url     = request.json.get("url")
     chat_id = request.json.get("chat_id")
     if not url or not chat_id:
         return jsonify({"error": "Missing url or chat_id"}), 400
 
     image_urls = extract_images(url)
     send_images_to_telegram(chat_id, image_urls)
-    return jsonify({"status": "done", "image_count": len(image_urls)})
+    return jsonify({"status": "done", "images_sent": len(image_urls)})
 
-# ---------- تشغيل الخادم ----------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
